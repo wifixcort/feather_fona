@@ -85,7 +85,7 @@ uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
 #define FONA_BAUD 4800
 //-------------------------------
 
-uint8_t t_wait = 8;   //Wait T_WAIT*8 [8 because you sleep 8s], default 1min
+uint8_t t_wait = 7;   //Wait T_WAIT*8 [8 because you sleep 8s], default 1min
 uint8_t n_times = 0;  //Time to wait before send the packets
 
 void init_fona(){
@@ -104,8 +104,6 @@ void init_fona(){
   #endif
   
   delay(20000);//Wait for FONA
-
-  t_wait  = t_wait*5;//Wait 5min to send
 
   gprs_disable();
   gprs_enable(0);
@@ -126,6 +124,8 @@ void setup() {
   
   pinMode(FONA_KEY, OUTPUT);
   digitalWrite(FONA_KEY, HIGH);
+
+  t_wait  = t_wait*5;//Wait 5min to send
 
   delay(2000);  
 }//end setup
