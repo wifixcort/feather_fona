@@ -47,8 +47,8 @@
 #define FONA_KEY A5
 //-----------------------------------
 
-#define IP_JSON "166.78.62.254/input/post.json?node="
-#define IP_APIKEY "&apikey=d1699ac02ed979dd0c4af09b84a3c9f5&json="
+#define IP_JSON "IP_SERVER/input/post.json?node="
+#define IP_APIKEY "&apikey=API_KEY&json="
 
 //------------Network identifiers-----------------
 uint8_t node_id = 15;   //This node id
@@ -107,7 +107,7 @@ void init_fona(){
 
   gprs_disable();
   gprs_enable(0);
- 
+
 }//end init_fona
 
 void setup() {
@@ -177,7 +177,7 @@ void secure_url_send(String &url){
     if((fona.GPRSstate()==0)||(fona.getNetworkStatus() != 1)){
       #if defined(DEBUG)
         serial.println(F("NetworkStatus or GPRS State errors"));
-      #endif        
+      #endif
       wdt_disable();//20s for init_fona needed
       delay(500);
       init_fona();//Reset FONA
