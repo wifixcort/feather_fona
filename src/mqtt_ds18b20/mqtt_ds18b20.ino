@@ -1,5 +1,5 @@
 /*
-  Feather FONA EMONCMS 808 Datalogger
+  Feather FONA 808 Adafruit MQTT Datalogger
 
   Ricardo Mena C
   ricardo@crcibernetica.com
@@ -35,6 +35,8 @@
 #include <SPI.h>
 #include <avr/wdt.h>
 #include "Adafruit_FONA.h"
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_FONA.h"
 #include <LowPower.h>   //https://github.com/rocketscream/Low-Power
 #include <Wire.h>
 #include <OneWire.h>
@@ -47,9 +49,6 @@
 #define FONA_KEY A5
 //-----------------------------------
 
-#define IP_JSON "IP_SERVER/input/post.json?node="
-#define IP_APIKEY "&apikey=API_KEY&json="
-
 //------------Network identifiers-----------------
 uint8_t node_id = 15;   //This node id
 //------------------------------------------------
@@ -60,11 +59,6 @@ OneWire oneWire(one_wire_bus);
 DallasTemperature sensors(&oneWire);
 DeviceAddress tempDeviceAddress;
 uint8_t resolution = 3;
-
-//---Paquetes to route----
-String pck = "";//Packet to send
-String msg = "";//Received packets
-String stringEvent = "";//Temporal buffer to receive from RX/TX
 
 //-----------------FONA things--------------------
 // this is a large buffer for replies
@@ -84,6 +78,30 @@ uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
 #define DEBUG //uncoment for debuging
 #define FONA_BAUD 4800
 //-------------------------------
+
+// Adafruit IO configuration
+#define AIO_SERVER           "io.adafruit.com"  // Adafruit IO server name.
+#define AIO_SERVERPORT       1883  // Adafruit IO port.
+#define AIO_USERNAME         "username"  // Adafruit IO username (see http://accounts.adafruit.com/).
+#define AIO_KEY              "IO_KEY"  // Adafruit IO key (see settings page at: https://io.adafruit.com/settings).
+
+#define MAX_TX_FAILURES 4  // Maximum number of publish failures in a row before resetting the whole sketch.
+
+const char MQTT_SERVER[] PROGMEM    = AIO_SERVER;
+const char MQTT_USERNAME[] PROGMEM  = AIO_USERNAME;
+const char MQTT_PASSWORD[] PROGMEM  = AIO_KEY;
+
+// Setup the FONA MQTT class by passing in the FONA class and MQTT server and login details.
+Adafruit_MQTT_FONA mqtt(&fona, MQTT_SERVER, AIO_SERVERPORT, MQTT_USERNAME, MQTT_PASSWORD);
+
+uint8_t txFailures = 0;
+
+// Feeds configuration
+const char TEMPERATURE_FEED[] PROGMEM = AIO_USERNAME "/feeds/feather_temperature";
+Adafruit_MQTT_Publish temperature_feed = Adafruit_MQTT_Publish(&mqtt, TEMPERATURE_FEED);
+
+const char BATTERY_FEED[] PROGMEM = AIO_USERNAME "/feeds/feather_battery";
+Adafruit_MQTT_Publish battery_feed = Adafruit_MQTT_Publish(&mqtt, BATTERY_FEED);
 
 uint8_t t_wait = 7;   //Wait T_WAIT*8 [8 because you sleep 8s], default 1min
 uint8_t n_times = 0;  //Time to wait before send the packets
@@ -108,7 +126,26 @@ void init_fona(){
   gprs_disable();
   gprs_enable(0);
 
+  mqtt_connect();
+
 }//end init_fona
+
+void mqtt_connect(){
+  // Now make the MQTT connection.
+  int8_t ret = mqtt.connect();
+  if (ret != 0) {
+    #if defined(DEBUG)
+    serial.println(mqtt.connectErrorString(ret));
+    #endif
+    //init_fona();
+    halt(F("FONA has some errors to initiate"));
+  }else{
+    #if defined(DEBUG)
+	    serial.println(F("MQTT Connected!"));
+    #endif
+  }//end if
+//  return 1;
+}//end mqtt_connect
 
 void setup() {
   sensors.begin();
@@ -136,6 +173,7 @@ void loop(){
     n_times = 0;//Back to start
   }else{//end if
     n_times++;//wait more
+    serial.println("Go to sleep");
   }//end if
   LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
   wdt_reset();
@@ -145,22 +183,27 @@ void send_temperature(){
     wdt_disable();
     serial.println("Starting Init FONA");
     init_fona();
-    for(uint8_t i = 0; i < 2; i++){//Send 2 messages
-      msg += String(node_id);//add node ID
-      msg += ' ';
-      sensors.requestTemperatures();//-->READ DS28B20 TEMPERATURA
-      msg += sensors.getTempCByIndex(0);
-      msg += ' ';
-      msg += String(fona_get_battery());//battery voltage in millivolts
-      secure_url_send(msg);
+    if((fona.GPRSstate()==0)||(fona.getNetworkStatus() != 1)||(!fona.TCPconnected()) || (txFailures >= MAX_TX_FAILURES)){
       #if defined(DEBUG)
-      serial.println(msg);
+        serial.println(F("NetworkStatus or GPRS State errors"));
       #endif
-      msg = "";//Clean on exit      
-    }//end for
+      wdt_disable();//20s for init_fona needed
+      fona_off();
+      delay(500);
+      init_fona();//Reset FONA
+      wdt_enable(WDTO_8S);
+      wdt_reset(); 
+    }
+    for(uint8_t i = 0; i < 2; i++){//Send 2 messages
+		  uint32_t temperature = 0;
+		  sensors.requestTemperatures();//-->READ DS28B20 TEMPERATURA
+    	temperature= sensors.getTempCByIndex(0);
+    	log_temperature(temperature, temperature_feed);
+	  }//end for
+    log_battery_percent(fona_get_battery(), battery_feed);
     fona_off();
     wdt_enable(WDTO_8S);//Reenable watchdog   
-}//end send_temperature
+}//end secure_url_send
 
 uint16_t fona_get_battery(void){
   // Grab battery reading
@@ -168,24 +211,6 @@ uint16_t fona_get_battery(void){
   fona.getBattPercent(&vbat);
   return vbat;
 }//end fona_get_battery
-
-void secure_url_send(String &url){
-  if(send_url(url) == -1){
-    #if defined(DEBUG)
-    serial.println(F("Error sendind URL"));
-    #endif
-    if((fona.GPRSstate()==0)||(fona.getNetworkStatus() != 1)){
-      #if defined(DEBUG)
-        serial.println(F("NetworkStatus or GPRS State errors"));
-      #endif
-      wdt_disable();//20s for init_fona needed
-      delay(500);
-      init_fona();//Reset FONA
-      wdt_enable(WDTO_8S);
-      wdt_reset(); 
-    }
-  }//end if
-}//end secure_url_send
 
 void halt(const __FlashStringHelper *error) {
   wdt_enable(WDTO_1S);
@@ -195,6 +220,42 @@ void halt(const __FlashStringHelper *error) {
   #endif
   while (1) {}
 }//end halt
+
+void log_temperature(uint32_t indicator, Adafruit_MQTT_Publish& publishFeed) {// Log battery
+  #if defined(DEBUG)
+  serial.print(F("Publishing temperature: "));
+  serial.println(indicator);
+  #endif
+  if (!publishFeed.publish(indicator)) {
+    #if defined(DEBUG)
+    serial.println(F("Publish failed!"));
+    #endif
+    txFailures++;
+  }else {
+    #if defined(DEBUG)
+    serial.println(F("Publish succeeded!"));
+    #endif
+    txFailures = 0;
+  }//end if
+}//end log_battery_percent
+
+void log_battery_percent(uint32_t indicator, Adafruit_MQTT_Publish& publishFeed) {// Log battery
+  #if defined(DEBUG)
+  serial.print(F("Publishing battery percentage: "));
+  serial.println(indicator);
+  #endif
+  if (!publishFeed.publish(indicator)) {
+    #if defined(DEBUG)
+    serial.println(F("Publish failed!"));
+    #endif
+    txFailures++;
+  }else {
+    #if defined(DEBUG)
+    serial.println(F("Publish succeeded!"));
+    #endif
+    txFailures = 0;
+  }//end if
+}//end log_battery_percent
 
 void print_IMEI(void){
   // Print SIM card IMEI number.
@@ -206,101 +267,6 @@ void print_IMEI(void){
   }//end if  
   #endif
 }//end print_IMEI
-
-String json_split(String &message, String &node_id){
-  String brak = "\{";
-  String number = "";
-  uint16_t j = 0;
-  uint8_t data_num = 1;
-  node_id = "";
-  for(uint8_t i = 0; i < message.length(); i++){
-    if((message[i] == ';')||(message[i] == ' ')){
-      j = i+1;
-      break;
-    }else{
-      node_id += message[i];
-    }//end if
-  }//end for
-
-  for(j; j < message.length(); j++){
-    if((message[j] == ';')||(message[j] == ' ')){
-      brak += String(data_num) + "\:" + number + "\,";
-      data_num++;
-      //serial.println(brak);
-      number = "";
-    }else{
-      if(message[j]!= '\r'){
-        number += message[j];
-      }
-    }//end if
-    
-  }//end for
-  brak += String(data_num) + "\:" + number+"\}";
-  return brak;
-  
-}//end json_pck
-
-// Post data to website
-int send_url(String &raw_paq){
-  flushSerial();
-  uint16_t statuscode;
-  int16_t length;
-  String node = "";//Store node id
-  String json = json_split(raw_paq, node);//split packet into json format and store node id througth reference
-  String url = IP_JSON+node+IP_APIKEY;
-  
-  int data_len = json.length()+1;
-  char data[data_len];
-  json.toCharArray(data, data_len);
-  #if defined(DEBUG)
-    serial.println(json);
-  #endif
-  
-  int l_url = url.length()+json.length();//strlen(data)
-  char c_url[l_url];
-  sprintf(c_url, "%s%s", url.c_str(),json.c_str());
-  //flushSerial();
-  
-  #if defined(DEBUG)  
-    serial.println(c_url);
-    serial.println(F("****"));
-  #endif
-       
-  if (!fona.HTTP_GET_start(c_url, &statuscode, (uint16_t *)&length)) {
-    #if defined(DEBUG)
-    serial.println("GPRS send failed!");
-    #endif
-    return -1;
-  }else{
-    #if defined(DEBUG)
-    serial.println("GPRS send ok");
-    #endif
-    #if defined(FREERAM)
-        serial.print("Free RAM TOP = ");
-        serial.println(freeRam());
-    #endif    
-  }
-  while (length > 0) {
-    while (fona.available()) {
-      char c = fona.read();     
-    // Serial.write is too slow, we'll write directly to Serial register!
-      #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-          loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
-          UDR0 = c;
-      #else
-          #if defined(DEBUG)
-          serial.write(c);
-          #endif
-      #endif
-      length--;
-      if (! length) break;
-    }//end while
-  }//end while
-  #if defined(DEBUG)
-    serial.println(F("\n****"));
-  #endif
-  fona.HTTP_GET_end();
-}//end send_url
 
 int gprs_enable(int maxtry){
   // turn GPRS on
@@ -386,3 +352,72 @@ void fona_off(){
   digitalWrite(FONA_KEY, HIGH);
   
 }//end fona_off
+
+String float_to_string(float value, uint8_t places) {
+  // this is used to cast digits 
+  int digit;
+  float tens = 0.1;
+  int tenscount = 0;
+  //int i;
+  float tempfloat = value;
+  String float_obj = "";
+
+    // make sure we round properly. this could use pow from <math.h>, but doesn't seem worth the import
+  // if this rounding step isn't here, the value  54.321 prints as 54.3209
+
+  // calculate rounding term d:   0.5/pow(10,places)  
+  float d = 0.5;
+  if (value < 0){
+    d *= -1.0;
+  }
+  // divide by ten for each decimal place
+  for (uint8_t i = 0; i < places; i++){
+    d/= 10.0;
+  }
+  // this small addition, combined with truncation will round our values properly 
+  tempfloat +=  d;
+
+  // first get value tens to be the large power of ten less than value
+  // tenscount isn't necessary but it would be useful if you wanted to know after this how many chars the number will take
+
+  if (value < 0){
+    tempfloat *= -1.0;
+  }
+  while ((tens * 10.0) <= tempfloat) {
+    tens *= 10.0;
+    tenscount += 1;
+  }
+  // write out the negative if needed
+  if (value < 0){
+    float_obj += "-";
+  }//en if
+  
+  if (tenscount == 0){
+    float_obj += String(0, DEC);
+  }//en if
+  
+  for (uint8_t i = 0; i< tenscount; i++) {
+    digit = (int) (tempfloat/tens);
+    float_obj += String(digit, DEC);
+    tempfloat = tempfloat - ((float)digit * tens);
+    tens /= 10.0;
+  }//en for
+
+  // if no places after decimal, stop now and return
+  if (places <= 0){
+    return float_obj;
+  }//end if
+
+  // otherwise, write the point and continue on
+  float_obj += ".";
+
+  // now write out each decimal place by shifting digits one by one into the ones place and writing the truncated value
+  for (uint8_t i = 0; i < places; i++) {
+    tempfloat *= 10.0; 
+    digit = (int) tempfloat;
+    float_obj += String(digit,DEC);  
+    // once written, subtract off that digit
+    tempfloat = tempfloat - (float) digit; 
+  }//end for
+  return float_obj;
+}
