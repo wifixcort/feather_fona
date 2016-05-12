@@ -99,9 +99,9 @@ void init_fona(){
   
   //APN configuration
   fona.setGPRSNetworkSettings(F(""), F(""), F(""));
-  #if defined(DEBUG)
+#if defined(DEBUG)
   serial.println(F("Waiting 20s.."));
-  #endif
+#endif
   
   delay(20000);//Wait for FONA
 
@@ -142,24 +142,24 @@ void loop(){
 }//end loop
 
 void send_temperature(){
-    wdt_disable();
-    serial.println("Starting Init FONA");
-    init_fona();
-    for(uint8_t i = 0; i < 2; i++){//Send 2 messages
-      msg += String(node_id);//add node ID
-      msg += ' ';
-      sensors.requestTemperatures();//-->READ DS28B20 TEMPERATURA
-      msg += sensors.getTempCByIndex(0);
-      msg += ' ';
-      msg += String(fona_get_battery());//battery voltage in millivolts
-      secure_url_send(msg);
-      #if defined(DEBUG)
-      serial.println(msg);
-      #endif
-      msg = "";//Clean on exit      
-    }//end for
-    fona_off();
-    wdt_enable(WDTO_8S);//Reenable watchdog   
+  wdt_disable();
+  serial.println("Starting Init FONA");
+  init_fona();
+  for(uint8_t i = 0; i < 2; i++){//Send 2 messages
+	msg += String(node_id);//add node ID
+	msg += ' ';
+	sensors.requestTemperatures();//-->READ DS28B20 TEMPERATURA
+	msg += sensors.getTempCByIndex(0);
+	msg += ' ';
+	msg += String(fona_get_battery());//battery voltage in millivolts
+	secure_url_send(msg);
+#if defined(DEBUG)
+	serial.println(msg);
+#endif
+	msg = "";//Clean on exit      
+  }//end for
+  fona_off();
+  wdt_enable(WDTO_8S);//Reenable watchdog   
 }//end send_temperature
 
 uint16_t fona_get_battery(void){
@@ -171,13 +171,13 @@ uint16_t fona_get_battery(void){
 
 void secure_url_send(String &url){
   if(send_url(url) == -1){
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println(F("Error sendind URL"));
-    #endif
+#endif
     if((fona.GPRSstate()==0)||(fona.getNetworkStatus() != 1)){
-      #if defined(DEBUG)
-        serial.println(F("NetworkStatus or GPRS State errors"));
-      #endif
+#if defined(DEBUG)
+	  serial.println(F("NetworkStatus or GPRS State errors"));
+#endif
       wdt_disable();//20s for init_fona needed
       delay(500);
       init_fona();//Reset FONA
@@ -190,21 +190,21 @@ void secure_url_send(String &url){
 void halt(const __FlashStringHelper *error) {
   wdt_enable(WDTO_1S);
   wdt_reset();
-  #if defined(DEBUG)
-    serial.println(error);
-  #endif
+#if defined(DEBUG)
+  serial.println(error);
+#endif
   while (1) {}
 }//end halt
 
 void print_IMEI(void){
   // Print SIM card IMEI number.
-  #if defined(DEBUG)
+#if defined(DEBUG)
   char imei[15] = {0}; // MUST use a 16 character buffer for IMEI!
   uint8_t imeiLen = fona.getIMEI(imei);
   if (imeiLen > 0) {
     serial.print("SIM card IMEI: "); serial.println(imei);
   }//end if  
-  #endif
+#endif
 }//end print_IMEI
 
 String json_split(String &message, String &node_id){
@@ -252,53 +252,53 @@ int send_url(String &raw_paq){
   int data_len = json.length()+1;
   char data[data_len];
   json.toCharArray(data, data_len);
-  #if defined(DEBUG)
-    serial.println(json);
-  #endif
+#if defined(DEBUG)
+  serial.println(json);
+#endif
   
   int l_url = url.length()+json.length();//strlen(data)
   char c_url[l_url];
   sprintf(c_url, "%s%s", url.c_str(),json.c_str());
   //flushSerial();
   
-  #if defined(DEBUG)  
-    serial.println(c_url);
-    serial.println(F("****"));
-  #endif
+#if defined(DEBUG)  
+  serial.println(c_url);
+  serial.println(F("****"));
+#endif
        
   if (!fona.HTTP_GET_start(c_url, &statuscode, (uint16_t *)&length)) {
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println("GPRS send failed!");
-    #endif
+#endif
     return -1;
   }else{
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println("GPRS send ok");
-    #endif
-    #if defined(FREERAM)
-        serial.print("Free RAM TOP = ");
-        serial.println(freeRam());
-    #endif    
+#endif
+#if defined(FREERAM)
+	serial.print("Free RAM TOP = ");
+	serial.println(freeRam());
+#endif    
   }
   while (length > 0) {
     while (fona.available()) {
       char c = fona.read();     
-    // Serial.write is too slow, we'll write directly to Serial register!
-      #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
-          loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
-          UDR0 = c;
-      #else
-          #if defined(DEBUG)
-          serial.write(c);
-          #endif
-      #endif
+	  // Serial.write is too slow, we'll write directly to Serial register!
+#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega168__)
+	  loop_until_bit_is_set(UCSR0A, UDRE0); /* Wait until data register empty. */
+	  UDR0 = c;
+#else
+#if defined(DEBUG)
+	  serial.write(c);
+#endif
+#endif
       length--;
       if (! length) break;
     }//end while
   }//end while
-  #if defined(DEBUG)
-    serial.println(F("\n****"));
-  #endif
+#if defined(DEBUG)
+  serial.println(F("\n****"));
+#endif
   fona.HTTP_GET_end();
 }//end send_url
 
@@ -307,10 +307,10 @@ int gprs_enable(int maxtry){
   wdt_enable(WDTO_2S);
   wdt_reset();
   if (!fona.enableGPRS(true)){
-    #if defined(DEBUG)
-      serial.print(F("Failed to turn on GPRS = "));
-      serial.println(maxtry);
-    #endif
+#if defined(DEBUG)
+	serial.print(F("Failed to turn on GPRS = "));
+	serial.println(maxtry);
+#endif
     if(maxtry > 200){
       wdt_enable(WDTO_1S);
       wdt_reset();
@@ -319,9 +319,9 @@ int gprs_enable(int maxtry){
     maxtry +=1;
     gprs_enable(maxtry);
   }else{
-    #if defined(DEBUG)
-      serial.println(F("GPRS ON"));
-    #endif
+#if defined(DEBUG)
+	serial.println(F("GPRS ON"));
+#endif
   }
   wdt_reset();
   wdt_disable();
@@ -330,57 +330,57 @@ int gprs_enable(int maxtry){
 int gprs_disable(){
   // turn GPRS off
   if (!fona.enableGPRS(false)){
-    #if defined(DEBUG)
-      serial.println(F("Failed to turn GPRS off"));
-    #endif
+#if defined(DEBUG)
+	serial.println(F("Failed to turn GPRS off"));
+#endif
   }else{
-    #if defined(DEBUG)
-      serial.println(F("GPRS OFF"));
-    #endif
+#if defined(DEBUG)
+	serial.println(F("GPRS OFF"));
+#endif
     return 1;
   }//end if
 }//end gprs_disable
 
 void flushSerial() {
   serial.flush();
-  #if defined(DEBUG)
+#if defined(DEBUG)
   serial.flush();
-  #endif
+#endif
 }//end flushSerial
 
 int check_fona(){
   // See if the FONA is responding
   if (!fona.begin(fonaSS)) {           // can also try fona.begin(Serial1)
-    #if defined(DEBUG)
-      serial.println(F("Couldn't find FONA"));
-    #endif  
+#if defined(DEBUG)
+	serial.println(F("Couldn't find FONA"));
+#endif  
     return 0;
   }//end if
-  #if defined(DEBUG)
-    serial.println(F("FONA is OK"));
-  #endif
+#if defined(DEBUG)
+  serial.println(F("FONA is OK"));
+#endif
   return 1;  
 }//end check_fona
 
 void fona_on(){
-  #if defined(DEBUG)
-    serial.println("Turning on Fona: ");
-  #endif
+#if defined(DEBUG)
+  serial.println("Turning on Fona: ");
+#endif
   /*while(digitalRead(FONA_PS)==LOW){//No PS in feather FONA
     digitalWrite(FONA_KEY, LOW);
-  }*/
+	}*/
   digitalWrite(FONA_KEY, LOW);
   delay(4000);
   digitalWrite(FONA_KEY, HIGH);
 }//end fona_on
 
 void fona_off(){
-  #if defined(DEBUG)
-    serial.println("Turning off Fona: ");
-  #endif
+#if defined(DEBUG)
+  serial.println("Turning off Fona: ");
+#endif
   /*while(digitalRead(FONA_PS)==HIGH){//No PS in feather FONA
     digitalWrite(FONA_KEY, LOW);
-  }*/
+	}*/
   digitalWrite(FONA_KEY, LOW);
   delay(4000);
   digitalWrite(FONA_KEY, HIGH);

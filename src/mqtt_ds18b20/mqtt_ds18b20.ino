@@ -117,9 +117,9 @@ void init_fona(){
   
   //APN configuration
   fona.setGPRSNetworkSettings(F(""), F(""), F(""));
-  #if defined(DEBUG)
+#if defined(DEBUG)
   serial.println(F("Waiting 20s.."));
-  #endif
+#endif
   
   delay(20000);//Wait for FONA
 
@@ -134,17 +134,17 @@ void mqtt_connect(){
   // Now make the MQTT connection.
   int8_t ret = mqtt.connect();
   if (ret != 0) {
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println(mqtt.connectErrorString(ret));
-    #endif
+#endif
     //init_fona();
     halt(F("FONA has some errors to initiate"));
   }else{
-    #if defined(DEBUG)
-	    serial.println(F("MQTT Connected!"));
-    #endif
+#if defined(DEBUG)
+	serial.println(F("MQTT Connected!"));
+#endif
   }//end if
-//  return 1;
+  //  return 1;
 }//end mqtt_connect
 
 void setup() {
@@ -180,29 +180,29 @@ void loop(){
 }//end loop
 
 void send_temperature(){
-    wdt_disable();
-    serial.println("Starting Init FONA");
-    init_fona();
-    if((fona.GPRSstate()==0)||(fona.getNetworkStatus() != 1)||(!fona.TCPconnected()) || (txFailures >= MAX_TX_FAILURES)){
-      #if defined(DEBUG)
-        serial.println(F("NetworkStatus or GPRS State errors"));
-      #endif
-      wdt_disable();//20s for init_fona needed
-      fona_off();
-      delay(500);
-      init_fona();//Reset FONA
-      wdt_enable(WDTO_8S);
-      wdt_reset(); 
-    }
-    for(uint8_t i = 0; i < 2; i++){//Send 2 messages
-		  uint32_t temperature = 0;
-		  sensors.requestTemperatures();//-->READ DS28B20 TEMPERATURA
-    	temperature= sensors.getTempCByIndex(0);
-    	log_temperature(temperature, temperature_feed);
-	  }//end for
-    log_battery_percent(fona_get_battery(), battery_feed);
-    fona_off();
-    wdt_enable(WDTO_8S);//Reenable watchdog   
+  wdt_disable();
+  serial.println("Starting Init FONA");
+  init_fona();
+  if((fona.GPRSstate()==0)||(fona.getNetworkStatus() != 1)||(!fona.TCPconnected()) || (txFailures >= MAX_TX_FAILURES)){
+#if defined(DEBUG)
+	serial.println(F("NetworkStatus or GPRS State errors"));
+#endif
+	wdt_disable();//20s for init_fona needed
+	fona_off();
+	delay(500);
+	init_fona();//Reset FONA
+	wdt_enable(WDTO_8S);
+	wdt_reset(); 
+  }
+  for(uint8_t i = 0; i < 2; i++){//Send 2 messages
+	uint32_t temperature = 0;
+	sensors.requestTemperatures();//-->READ DS28B20 TEMPERATURA
+	temperature= sensors.getTempCByIndex(0);
+	log_temperature(temperature, temperature_feed);
+  }//end for
+  log_battery_percent(fona_get_battery(), battery_feed);
+  fona_off();
+  wdt_enable(WDTO_8S);//Reenable watchdog   
 }//end secure_url_send
 
 uint16_t fona_get_battery(void){
@@ -215,57 +215,57 @@ uint16_t fona_get_battery(void){
 void halt(const __FlashStringHelper *error) {
   wdt_enable(WDTO_1S);
   wdt_reset();
-  #if defined(DEBUG)
-    serial.println(error);
-  #endif
+#if defined(DEBUG)
+  serial.println(error);
+#endif
   while (1) {}
 }//end halt
 
 void log_temperature(uint32_t indicator, Adafruit_MQTT_Publish& publishFeed) {// Log battery
-  #if defined(DEBUG)
+#if defined(DEBUG)
   serial.print(F("Publishing temperature: "));
   serial.println(indicator);
-  #endif
+#endif
   if (!publishFeed.publish(indicator)) {
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println(F("Publish failed!"));
-    #endif
+#endif
     txFailures++;
   }else {
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println(F("Publish succeeded!"));
-    #endif
+#endif
     txFailures = 0;
   }//end if
 }//end log_battery_percent
 
 void log_battery_percent(uint32_t indicator, Adafruit_MQTT_Publish& publishFeed) {// Log battery
-  #if defined(DEBUG)
+#if defined(DEBUG)
   serial.print(F("Publishing battery percentage: "));
   serial.println(indicator);
-  #endif
+#endif
   if (!publishFeed.publish(indicator)) {
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println(F("Publish failed!"));
-    #endif
+#endif
     txFailures++;
   }else {
-    #if defined(DEBUG)
+#if defined(DEBUG)
     serial.println(F("Publish succeeded!"));
-    #endif
+#endif
     txFailures = 0;
   }//end if
 }//end log_battery_percent
 
 void print_IMEI(void){
   // Print SIM card IMEI number.
-  #if defined(DEBUG)
+#if defined(DEBUG)
   char imei[15] = {0}; // MUST use a 16 character buffer for IMEI!
   uint8_t imeiLen = fona.getIMEI(imei);
   if (imeiLen > 0) {
     serial.print("SIM card IMEI: "); serial.println(imei);
   }//end if  
-  #endif
+#endif
 }//end print_IMEI
 
 int gprs_enable(int maxtry){
@@ -273,10 +273,10 @@ int gprs_enable(int maxtry){
   wdt_enable(WDTO_2S);
   wdt_reset();
   if (!fona.enableGPRS(true)){
-    #if defined(DEBUG)
-      serial.print(F("Failed to turn on GPRS = "));
-      serial.println(maxtry);
-    #endif
+#if defined(DEBUG)
+	serial.print(F("Failed to turn on GPRS = "));
+	serial.println(maxtry);
+#endif
     if(maxtry > 200){
       wdt_enable(WDTO_1S);
       wdt_reset();
@@ -285,9 +285,9 @@ int gprs_enable(int maxtry){
     maxtry +=1;
     gprs_enable(maxtry);
   }else{
-    #if defined(DEBUG)
-      serial.println(F("GPRS ON"));
-    #endif
+#if defined(DEBUG)
+	serial.println(F("GPRS ON"));
+#endif
   }
   wdt_reset();
   wdt_disable();
@@ -296,57 +296,57 @@ int gprs_enable(int maxtry){
 int gprs_disable(){
   // turn GPRS off
   if (!fona.enableGPRS(false)){
-    #if defined(DEBUG)
-      serial.println(F("Failed to turn GPRS off"));
-    #endif
+#if defined(DEBUG)
+	serial.println(F("Failed to turn GPRS off"));
+#endif
   }else{
-    #if defined(DEBUG)
-      serial.println(F("GPRS OFF"));
-    #endif
+#if defined(DEBUG)
+	serial.println(F("GPRS OFF"));
+#endif
     return 1;
   }//end if
 }//end gprs_disable
 
 void flushSerial() {
   serial.flush();
-  #if defined(DEBUG)
+#if defined(DEBUG)
   serial.flush();
-  #endif
+#endif
 }//end flushSerial
 
 int check_fona(){
   // See if the FONA is responding
   if (!fona.begin(fonaSS)) {           // can also try fona.begin(Serial1)
-    #if defined(DEBUG)
-      serial.println(F("Couldn't find FONA"));
-    #endif  
+#if defined(DEBUG)
+	serial.println(F("Couldn't find FONA"));
+#endif  
     return 0;
   }//end if
-  #if defined(DEBUG)
-    serial.println(F("FONA is OK"));
-  #endif
+#if defined(DEBUG)
+  serial.println(F("FONA is OK"));
+#endif
   return 1;  
 }//end check_fona
 
 void fona_on(){
-  #if defined(DEBUG)
-    serial.println("Turning on Fona: ");
-  #endif
+#if defined(DEBUG)
+  serial.println("Turning on Fona: ");
+#endif
   /*while(digitalRead(FONA_PS)==LOW){//No PS in feather FONA
     digitalWrite(FONA_KEY, LOW);
-  }*/
+	}*/
   digitalWrite(FONA_KEY, LOW);
   delay(4000);
   digitalWrite(FONA_KEY, HIGH);
 }//end fona_on
 
 void fona_off(){
-  #if defined(DEBUG)
-    serial.println("Turning off Fona: ");
-  #endif
+#if defined(DEBUG)
+  serial.println("Turning off Fona: ");
+#endif
   /*while(digitalRead(FONA_PS)==HIGH){//No PS in feather FONA
     digitalWrite(FONA_KEY, LOW);
-  }*/
+	}*/
   digitalWrite(FONA_KEY, LOW);
   delay(4000);
   digitalWrite(FONA_KEY, HIGH);
@@ -362,7 +362,7 @@ String float_to_string(float value, uint8_t places) {
   float tempfloat = value;
   String float_obj = "";
 
-    // make sure we round properly. this could use pow from <math.h>, but doesn't seem worth the import
+  // make sure we round properly. this could use pow from <math.h>, but doesn't seem worth the import
   // if this rounding step isn't here, the value  54.321 prints as 54.3209
 
   // calculate rounding term d:   0.5/pow(10,places)  
